@@ -873,3 +873,101 @@ body {
   padding: 12px;
   font-size: 13px;
 }
+
+/* ONE-BANK INTEGRATION STYLES */
+.bank-stat-chip {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(14, 22, 40, 0.95)) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  box-shadow: 0 4px 18px rgba(245, 158, 11, 0.07);
+}
+
+.bank-settlement-box {
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(14, 22, 40, 0.9);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.bank-settlement-box.settlement-ok {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: linear-gradient(145deg, rgba(16, 185, 129, 0.08), rgba(14, 22, 40, 0.95));
+}
+
+.bank-settlement-box.settlement-shortage {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: linear-gradient(145deg, rgba(239, 68, 68, 0.1), rgba(14, 22, 40, 0.95));
+}
+
+.settlement-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.settlement-table td {
+  padding: 4px 0;
+}
+
+.settlement-table td:last-child {
+  text-align: right;
+  font-weight: 700;
+}
+
+.settlement-divider {
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+  margin: 6px 0;
+}
+
+.settlement-alert {
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  line-height: 1.45;
+}
+
+.settlement-alert.ok {
+  background: rgba(16, 185, 129, 0.12);
+  color: #a7f3d0;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.settlement-alert.warn {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.inspector-bank-card {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.inspector-bank-card.can-afford {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(15, 23, 42, 0.9));
+}
+
+.inspector-bank-card.cannot-afford {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(15, 23, 42, 0.9));
+}
+
+.btn:disabled,
+.btn.disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  pointer-events: none;
+  filter: grayscale(40%);
+}
+

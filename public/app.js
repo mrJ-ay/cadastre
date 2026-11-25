@@ -136,6 +136,8 @@ const statTotalBuildings = document.getElementById('statTotalBuildings');
 const statForSale = document.getElementById('statForSale');
 const statOwned = document.getElementById('statOwned');
 const statMyBuildings = document.getElementById('statMyBuildings');
+const statBankBalance = document.getElementById('statBankBalance');
+const statBankAccountNo = document.getElementById('statBankAccountNo');
 
 const buildingListCount = document.getElementById('buildingListCount');
 const buildingLedgerList = document.getElementById('buildingLedgerList');
@@ -153,6 +155,8 @@ const mapZoomLevel = document.getElementById('mapZoomLevel');
 const buyModal = document.getElementById('buyModal');
 const closeBuyModalBtn = document.getElementById('closeBuyModalBtn');
 const buyForm = document.getElementById('buyForm');
+const buyBankSettlementBox = document.getElementById('buyBankSettlementBox');
+const buySubmitBtn = document.getElementById('buySubmitBtn');
 
 const manageModal = document.getElementById('manageModal');
 const closeManageModalBtn = document.getElementById('closeManageModalBtn');
@@ -283,10 +287,28 @@ function renderStats() {
   const ownedCnt = list.filter((b) => Boolean(b.ownerUserId)).length;
   const myCnt = list.filter((b) => isMine(b)).length;
 
-  statTotalBuildings.textContent = `${list.length}동`;
-  statForSale.textContent = `${saleCnt}동`;
-  statOwned.textContent = `${ownedCnt}동`;
-  statMyBuildings.textContent = `${myCnt}동`;
+  if (statTotalBuildings) statTotalBuildings.textContent = `${list.length}동`;
+  if (statForSale) statForSale.textContent = `${saleCnt}동`;
+  if (statOwned) statOwned.textContent = `${ownedCnt}동`;
+  if (statMyBuildings) statMyBuildings.textContent = `${myCnt}동`;
+
+  if (statBankBalance) {
+    if (stateData.me?.bank) {
+      statBankBalance.textContent = formatWon(stateData.me.bank.balance);
+    } else if (stateData.me) {
+      statBankBalance.textContent = '조회 중...';
+    } else {
+      statBankBalance.textContent = '로그인 필요';
+    }
+  }
+
+  if (statBankAccountNo) {
+    if (stateData.me?.bank?.accountNo) {
+      statBankAccountNo.textContent = `계좌: ${stateData.me.bank.accountNo}`;
+    } else {
+      statBankAccountNo.textContent = '계좌: 777-01-XXXXXX';
+    }
+  }
 }
 
 // =========================================================
@@ -761,6 +783,44 @@ function renderInspector(b) {
 
     <p style="font-size:12.5px;color:#cbd5e1;line-height:1.55;">${escapeHtml(b.description)}</p>
 
+    <!-- ONE-BANK SETTLEMENT CAPABILITY CARD -->
+    ${(() => {
+      if (!b.forSale || mine) return '';
+      if (!stateData.me) {
+        return `
+          <div class="inspector-bank-card">
+            <div>
+              <span style="font-size:11px;color:#94a3b8;">🏦 원뱅크 결제 연동</span>
+              <div style="font-size:12.5px;font-weight:700;color:#fcd34d;">로그인 후 통장 잔고 및 즉시 매수 가능 여부 확인</div>
+            </div>
+            <button type="button" class="btn small gold" id="inspectorLoginBtn">로그인</button>
+          </div>
+        `;
+      }
+      const myBal = Number(stateData.me?.bank?.balance ?? 0);
+      const canAfford = myBal >= b.price;
+      const acct = stateData.me?.bank?.accountNo || '777-01-XXXXXX';
+      return `
+        <div class="inspector-bank-card ${canAfford ? 'can-afford' : 'cannot-afford'}">
+          <div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:11px;color:#94a3b8;">🏦 내 원뱅크 (${acct})</span>
+              ${
+                canAfford
+                  ? `<span class="badge" style="background:rgba(16,185,129,0.2);color:#34d399;font-size:10.5px;padding:2px 6px;">🟢 즉시 매수가능</span>`
+                  : `<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;font-size:10.5px;padding:2px 6px;">🔴 잔액 부족</span>`
+              }
+            </div>
+            <div style="font-size:13px;font-weight:800;margin-top:2px;color:${canAfford ? '#34d399' : '#f87171'};">
+              보유 잔고: ${formatWon(myBal)}
+              ${!canAfford ? `<span style="font-size:11.5px;font-weight:600;color:#fca5a5;"> (${formatWon(b.price - myBal)} 부족)</span>` : ''}
+            </div>
+          </div>
+          <a href="${cfg.oneBankUrl || 'https://one-bank-seven.vercel.app'}" target="_blank" rel="noopener" class="btn small ghost">원뱅크 ↗</a>
+        </div>
+      `;
+    })()}
+
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
       ${
         b.forSale && !mine
@@ -788,6 +848,7 @@ function renderInspector(b) {
     </div>
   `;
 
+  document.getElementById('inspectorLoginBtn')?.addEventListener('click', () => startOneIdLogin());
   document.getElementById('inspectorBuyBtn')?.addEventListener('click', () => openBuyModal(b));
   document.getElementById('inspectorManageBtn')?.addEventListener('click', () => openManageModal(b));
   document.getElementById('inspectorDownloadDeedBtn')?.addEventListener('click', () => exportDeedPng(b));
@@ -810,6 +871,90 @@ function openBuyModal(b) {
     <div style="font-size:12px;color:#94a3b8;margin-top:2px;">소재지: ${escapeHtml(b.address)}</div>
     <div style="font-size:13px;color:#fcd34d;margin-top:4px;font-weight:800;">등기 매입가: ${formatWon(b.price)}</div>
   `;
+
+  // ONE-BANK Settlement Calculation
+  const myBal = Number(stateData.me?.bank?.balance ?? 0);
+  const accountNo = stateData.me?.bank?.accountNo || '777-01-XXXXXX';
+  const price = Number(b.price);
+  const canAfford = myBal >= price;
+  const remBal = myBal - price;
+  const shortage = price - myBal;
+
+  if (buyBankSettlementBox) {
+    if (canAfford) {
+      buyBankSettlementBox.className = 'bank-settlement-box settlement-ok';
+      buyBankSettlementBox.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-weight:800;color:#34d399;">🏦 원뱅크 즉시 결제 정산서</span>
+          <span style="font-size:11px;color:#94a3b8;">계좌: ${accountNo}</span>
+        </div>
+        <table class="settlement-table">
+          <tbody>
+            <tr>
+              <td style="color:#94a3b8;">현재 통장 잔고</td>
+              <td style="color:#f1f5f9;">${formatWon(myBal)}</td>
+            </tr>
+            <tr>
+              <td style="color:#94a3b8;">부동산 매매 대금 (출금)</td>
+              <td style="color:#ef4444;">- ${formatWon(price)}</td>
+            </tr>
+            <tr><td colspan="2" class="settlement-divider"></td></tr>
+            <tr>
+              <td style="color:#6ee7b7;font-weight:700;">결제 후 예상 잔여 잔고</td>
+              <td style="color:#34d399;font-size:14px;">${formatWon(remBal)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="settlement-alert ok">
+          ✅ <strong>결제 가능:</strong> 신청 즉시 원뱅크 계좌에서 대금이 자동 출금되어 소유권 이전 등기 및 권리증이 발급됩니다.
+        </div>
+      `;
+    } else {
+      buyBankSettlementBox.className = 'bank-settlement-box settlement-shortage';
+      buyBankSettlementBox.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-weight:800;color:#f87171;">⚠️ 원뱅크 잔고 부족 안내</span>
+          <span style="font-size:11px;color:#94a3b8;">계좌: ${accountNo}</span>
+        </div>
+        <table class="settlement-table">
+          <tbody>
+            <tr>
+              <td style="color:#94a3b8;">현재 통장 잔고</td>
+              <td style="color:#f1f5f9;">${formatWon(myBal)}</td>
+            </tr>
+            <tr>
+              <td style="color:#94a3b8;">필요 매매 대금</td>
+              <td style="color:#ef4444;">${formatWon(price)}</td>
+            </tr>
+            <tr><td colspan="2" class="settlement-divider"></td></tr>
+            <tr>
+              <td style="color:#fca5a5;font-weight:700;">부족 금액</td>
+              <td style="color:#f87171;font-size:14px;">${formatWon(shortage)} 부족</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="settlement-alert warn">
+          ❌ <strong>잔고가 부족합니다:</strong> 원뱅크에서 자금을 송금받거나 충전한 후 등기 신청을 진행해 주세요.
+        </div>
+        <div style="text-align:right;">
+          <a href="${cfg.oneBankUrl || 'https://one-bank-seven.vercel.app'}" target="_blank" rel="noopener" class="btn small gold" style="display:inline-flex;align-items:center;gap:4px;">
+            🏦 원뱅크 바로가기 ↗
+          </a>
+        </div>
+      `;
+    }
+  }
+
+  if (buySubmitBtn) {
+    buySubmitBtn.disabled = !canAfford;
+    buySubmitBtn.classList.toggle('disabled', !canAfford);
+    if (canAfford) {
+      buySubmitBtn.innerHTML = `✍️ ${formatWon(price)} 원뱅크 결제 및 등기권리증 발급`;
+    } else {
+      buySubmitBtn.innerHTML = `⚠️ 원뱅크 잔고 부족 (${formatWon(shortage)} 부족)`;
+    }
+  }
+
   document.getElementById('buyCoOwnerInput').value = stateData.me.partnerName || '';
   document.getElementById('buySignboardInput').value = b.signboard || `${stateData.me.nickname} 타워`;
   document.getElementById('buySetDomicileCheck').checked = true;
@@ -1135,11 +1280,17 @@ buyForm?.addEventListener('submit', async (e) => {
       },
     });
     buyModal.hidden = true;
+    if (res.newBalance !== undefined && stateData.me?.bank) {
+      stateData.me.bank.balance = res.newBalance;
+    }
     await loadOverview(id);
     alert(
-      res.domicileUpdated
-        ? '🎉 소유권 이전 등기가 완료되었으며, 통합 주민센터(CITIZEN PASS) 내 주민등록증 주소지도 이 건물로 즉시 변경되었습니다!'
-        : '🎉 소유권 이전 등기가 완료되었습니다!'
+      `🎉 [원뱅크 결제 및 소유권 등기 완료]\n` +
+      `원뱅크 계좌에서 매매대금이 정상 출금되었습니다.\n` +
+      `• 현재 잔고: ${formatWon(res.newBalance ?? 0)}\n\n` +
+      (res.domicileUpdated
+        ? '✅ 소유권 이전 등기 완료 및 통합 주민센터(CITIZEN PASS) 내 주민등록증 공식 주소지도 이 건물로 즉시 변경되었습니다!'
+        : '✅ 소유권 이전 등기가 완료되었습니다!')
     );
   } catch (err) {
     alert(err.message);

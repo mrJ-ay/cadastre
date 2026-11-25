@@ -17,6 +17,7 @@ const PORT = Number(process.env.PORT || 3018);
 const ONEID_URL = (process.env.ONEID_URL || 'https://oneid-ruddy.vercel.app').replace(/\/$/, '');
 const CITIZEN_PASS_URL = (process.env.CITIZEN_PASS_URL || 'https://citizen-pass-beryl.vercel.app').replace(/\/$/, '');
 const AGORA_URL = (process.env.AGORA_URL || 'https://assembly-lovat.vercel.app').replace(/\/$/, '');
+const ONE_BANK_URL = (process.env.ONE_BANK_URL || 'https://one-bank-seven.vercel.app').replace(/\/$/, '');
 const CLIENT_ID = process.env.ONEID_CLIENT_ID || 'cadastre';
 
 let rawDbUrl = process.env.DATABASE_URL || '';
@@ -556,9 +557,60 @@ app.get('/api/config', (_req, res) => {
     oneidUrl: ONEID_URL,
     citizenPassUrl: CITIZEN_PASS_URL,
     agoraUrl: AGORA_URL,
+    oneBankUrl: ONE_BANK_URL,
     clientId: CLIENT_ID,
   });
 });
+
+async function getOrCreateBankInfo(userId, nickname) {
+  if (!pool) return null;
+  try {
+    let pRes = await pool.query(
+      'SELECT id, name, balance, credit FROM ns_players WHERE id = $1',
+      [userId]
+    );
+    if (!pRes.rows.length) {
+      pRes = await pool.query(
+        `INSERT INTO ns_players (id, name, balance, credit)
+         VALUES ($1, $2, 10000000, 500)
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id, name, balance, credit`,
+        [userId, nickname]
+      );
+    }
+    const player = pRes.rows[0];
+
+    let bRes = await pool.query(
+      'SELECT account_no, account_name FROM bank_accounts WHERE player_id = $1',
+      [userId]
+    );
+    let accountNo = bRes.rows[0]?.account_no;
+    let accountName = bRes.rows[0]?.account_name || 'ONE 주거래 자유입출금통장';
+    if (!accountNo) {
+      let hash = 0;
+      for (let i = 0; i < userId.length; i++) {
+        hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
+      }
+      accountNo = `777-01-${(hash % 900000 + 100000).toString()}`;
+      await pool.query(
+        `INSERT INTO bank_accounts (player_id, account_no, account_name)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (player_id) DO NOTHING`,
+        [userId, accountNo, accountName]
+      );
+    }
+
+    return {
+      accountNo,
+      accountName,
+      balance: Number(player.balance),
+      credit: Number(player.credit || 500),
+    };
+  } catch (err) {
+    console.error('getOrCreateBankInfo error:', err.message);
+    return null;
+  }
+}
 
 app.get('/api/overview', async (req, res) => {
   if (!pool) return res.status(500).json({ error: 'DATABASE_URL not configured' });
@@ -584,8 +636,10 @@ app.get('/api/overview', async (req, res) => {
       tradedAt: t.traded_at,
     }));
 
+    let myBank = null;
     let myPartnerName = null;
     if (user) {
+      myBank = await getOrCreateBankInfo(user.id, user.nickname);
       try {
         const { rows: cpRows } = await pool.query(
           `SELECT partner_a_name, partner_b_name, partner_a_user_id
@@ -606,7 +660,7 @@ app.get('/api/overview', async (req, res) => {
     }
 
     res.json({
-      me: user ? { ...user, partnerName: myPartnerName } : null,
+      me: user ? { ...user, partnerName: myPartnerName, bank: myBank } : null,
       buildings,
       trades,
     });
@@ -615,7 +669,7 @@ app.get('/api/overview', async (req, res) => {
   }
 });
 
-// 건물 매입 (분양 또는 매수) + 선택 시 주민등록증(citizen_cards) 주소지 자동 변경!
+// 건물 매입 (분양 또는 매수) + ONE-BANK 계좌 잔고 원자적 차감 & 판매자 입금 + 주민등록증 주소지 연동
 app.post('/api/buildings/:id/buy', async (req, res) => {
   const user = await verifyOneIdUser(req);
   if (!user) return res.status(401).json({ error: '부동산을 매입·등기하려면 ONEID 로그인이 필요합니다.' });
@@ -625,18 +679,86 @@ app.post('/api/buildings/:id/buy', async (req, res) => {
   const customSignboard = String(req.body?.signboard || '').trim().slice(0, 60);
   const setAsDomicile = Boolean(req.body?.setAsDomicile);
 
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query('SELECT * FROM cadastre_buildings WHERE id = $1', [id]);
-    const b = rows[0];
-    if (!b) return res.status(404).json({ error: '해당 필지·건물을 찾을 수 없습니다.' });
+    await client.query('BEGIN');
+
+    // 1. Lock building
+    const { rows: bRows } = await client.query('SELECT * FROM cadastre_buildings WHERE id = $1 FOR UPDATE', [id]);
+    const b = bRows[0];
+    if (!b) throw new Error('해당 필지·건물을 찾을 수 없습니다.');
     if (!b.for_sale && b.owner_user_id !== user.id && !user.isAdmin) {
-      return res.status(400).json({ error: '현재 매물로 나와 있지 않은 사유지 건물입니다.' });
+      throw new Error('현재 매물로 나와 있지 않은 사유지 건물입니다.');
+    }
+    if (b.owner_user_id === user.id) {
+      throw new Error('이미 본인이 소유하고 있는 건물입니다.');
     }
 
-    const prevOwner = b.owner_name || '국유지 (미분양)';
-    const nextSignboard = customSignboard || b.signboard;
+    const price = Number(b.price);
+    const prevOwnerUserId = b.owner_user_id;
+    const prevOwnerName = b.owner_name || '국유지 (미분양)';
 
-    const { rows: updated } = await pool.query(
+    // 2. Lock buyer in ns_players and verify ONE-BANK balance
+    let buyerRes = await client.query('SELECT id, name, balance FROM ns_players WHERE id = $1 FOR UPDATE', [user.id]);
+    if (!buyerRes.rows.length) {
+      await client.query(
+        'INSERT INTO ns_players (id, name, balance) VALUES ($1, $2, 10000000) ON CONFLICT (id) DO NOTHING',
+        [user.id, user.nickname]
+      );
+      buyerRes = await client.query('SELECT id, name, balance FROM ns_players WHERE id = $1 FOR UPDATE', [user.id]);
+    }
+    const buyer = buyerRes.rows[0];
+    const buyerBal = Number(buyer.balance);
+
+    if (buyerBal < price) {
+      const deficit = price - buyerBal;
+      throw new Error(
+        `원뱅크(ONE-BANK) 예치 잔고가 부족합니다!\n• 건물 매매가: ₩${price.toLocaleString()}원\n• 현재 원뱅크 잔고: ₩${buyerBal.toLocaleString()}원\n• 부족 금액: ₩${deficit.toLocaleString()}원\n\n원뱅크에서 자금을 송금받거나 충전 후 다시 시도해 주세요.`
+      );
+    }
+
+    // 3. Deduct price from buyer's ONE-BANK account
+    const newBuyerBal = buyerBal - price;
+    await client.query('UPDATE ns_players SET balance = $1 WHERE id = $2', [newBuyerBal, user.id]);
+
+    // 4. Record buyer ledger in ns_ledger
+    await client.query(
+      `INSERT INTO ns_ledger (player_id, delta, balance_after, reason, ref)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        user.id,
+        -price,
+        newBuyerBal,
+        'cadastre_buy',
+        `[부동산 등기] ${b.name} (${b.lot_no}) 소유권 이전 매입 결제 (매매대금: ₩${price.toLocaleString()})`
+      ]
+    );
+
+    // 5. If previous owner was a private user, transfer funds directly to seller! (P2P transaction)
+    if (prevOwnerUserId && prevOwnerUserId !== user.id) {
+      const sellerRes = await client.query('SELECT id, name, balance FROM ns_players WHERE id = $1 FOR UPDATE', [prevOwnerUserId]);
+      if (sellerRes.rows.length) {
+        const seller = sellerRes.rows[0];
+        const newSellerBal = Number(seller.balance) + price;
+        await client.query('UPDATE ns_players SET balance = $1 WHERE id = $2', [newSellerBal, prevOwnerUserId]);
+
+        await client.query(
+          `INSERT INTO ns_ledger (player_id, delta, balance_after, reason, ref)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            prevOwnerUserId,
+            price,
+            newSellerBal,
+            'cadastre_sell',
+            `[부동산 매도] ${b.name} (${b.lot_no}) 소유권 이전 대금 입금 (매수인: ${user.nickname})`
+          ]
+        );
+      }
+    }
+
+    // 6. Update building ownership
+    const nextSignboard = customSignboard || b.signboard;
+    const { rows: updated } = await client.query(
       `UPDATE cadastre_buildings
        SET owner_user_id = $1,
            owner_name = $2,
@@ -649,15 +771,17 @@ app.post('/api/buildings/:id/buy', async (req, res) => {
       [user.id, user.nickname, coOwnerName, nextSignboard, id]
     );
 
-    await pool.query(
+    // 7. Record transaction history
+    await client.query(
       `INSERT INTO cadastre_trades (lot_no, building_name, buyer_name, co_owner_name, seller_name, price)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [b.lot_no, b.name, user.nickname, coOwnerName, prevOwner, b.price]
+      [b.lot_no, b.name, user.nickname, coOwnerName, prevOwnerName, price]
     );
 
+    // 8. Update domicile on citizen pass if requested
     if (setAsDomicile) {
       try {
-        await pool.query(
+        await client.query(
           `UPDATE citizen_cards
            SET domicile = $1, updated_at = NOW()
            WHERE user_id = $2`,
@@ -666,13 +790,19 @@ app.post('/api/buildings/:id/buy', async (req, res) => {
       } catch {}
     }
 
+    await client.query('COMMIT');
+
     res.json({
       ok: true,
       building: serializeBuilding(updated[0]),
+      newBalance: newBuyerBal,
       domicileUpdated: setAsDomicile,
     });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
