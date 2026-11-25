@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CADASTRE — ATELIER J 도시 지적도 · 부동산 등기 거래소</title>
-  <link rel="stylesheet" href="/style.css?v=1" />
+  <link rel="stylesheet" href="/style.css?v=2" />
 </head>
 <body>
   <header class="topbar">
@@ -62,39 +62,135 @@
       <div class="card map-stage-card">
         <div class="map-stage-head">
           <div>
-            <span class="eyebrow">ATELIER METROPOLITAN CADASTRAL MAP</span>
-            <h2>🗺️ 아텔리에 제1특별시 실시간 지적도 · 건물 현황판</h2>
+            <span class="eyebrow">ATELIER METROPOLITAN ISLAND CADASTRAL MAP</span>
+            <h2>🗺️ 아텔리에 제1특별시 전도 (島嶼 실시간 지적도)</h2>
           </div>
           <div class="map-legend">
-            <span class="leg-item"><i class="dot sale"></i> 분양/매물</span>
-            <span class="leg-item"><i class="dot owned"></i> 사유지(등기됨)</span>
-            <span class="leg-item"><i class="dot mine"></i> 내 소유 건물</span>
+            <span class="leg-item"><i class="dot sale"></i> 분양/매물 (가상부동산)</span>
+            <span class="leg-item"><i class="dot owned"></i> 사유지(등기완료)</span>
+            <span class="leg-item"><i class="dot mine"></i> 내 건물</span>
+            <span class="leg-item"><i class="dot landmark"></i> 공공 랜드마크 (비매품)</span>
           </div>
         </div>
 
-        <div class="city-map-viewport" id="cityMapViewport">
-          <!-- District Background Zones & Roads -->
-          <svg class="city-roads-svg" viewBox="0 0 1000 700" preserveAspectRatio="none">
-            <!-- River running through the city -->
-            <path d="M 0,430 Q 260,390 510,455 T 1000,420" fill="none" stroke="rgba(14, 165, 233, 0.22)" stroke-width="44" />
-            <path d="M 0,430 Q 260,390 510,455 T 1000,420" fill="none" stroke="rgba(56, 189, 248, 0.35)" stroke-width="2" stroke-dasharray="10,8" />
-            <!-- Major Highways & Grid Roads -->
-            <line x1="500" y1="0" x2="500" y2="700" stroke="rgba(148, 163, 184, 0.2)" stroke-width="10" />
-            <line x1="0" y1="250" x2="1000" y2="250" stroke="rgba(148, 163, 184, 0.2)" stroke-width="10" />
-            <line x1="280" y1="0" x2="280" y2="700" stroke="rgba(148, 163, 184, 0.14)" stroke-width="5" />
-            <line x1="700" y1="0" x2="700" y2="700" stroke="rgba(148, 163, 184, 0.14)" stroke-width="5" />
-            <circle cx="500" cy="250" r="115" fill="none" stroke="rgba(251, 191, 36, 0.22)" stroke-width="4" stroke-dasharray="6,6" />
-          </svg>
+        <div class="city-map-container" id="cityMapContainer">
+          <!-- Floating Map Controls -->
+          <div class="map-controls">
+            <button type="button" class="map-ctrl-btn" id="mapZoomInBtn" title="지도 확대 (+)">➕</button>
+            <button type="button" class="map-ctrl-btn" id="mapZoomOutBtn" title="지도 축소 (−)">➖</button>
+            <button type="button" class="map-ctrl-btn" id="mapResetBtn" title="섬 전체 보기">🎯 섬 전체</button>
+            <span class="map-zoom-level" id="mapZoomLevel">100%</span>
+          </div>
 
-          <!-- District Watermark Labels -->
-          <div class="zone-label zone-central">제1구 · 중앙 행정·의사당구<br><span>CENTRAL CAPITOL DISTRICT</span></div>
-          <div class="zone-label zone-finance">제2구 · 넥서스 금융·비즈니스구<br><span>NEXUS FINANCIAL DISTRICT</span></div>
-          <div class="zone-label zone-media">제3구 · 펄스 미디어·창작밸리<br><span>PULSE MEDIA VALLEY</span></div>
-          <div class="zone-label zone-plaza">제4구 · 피그스티 광장·번화가<br><span>PIGSTY GRAND PLAZA</span></div>
-          <div class="zone-label zone-underground">제5구 · 언더그라운드·제한구역<br><span>UNDERGROUND RESTRICTED ZONE</span></div>
+          <!-- Floating Navigation Hint -->
+          <div class="map-pan-hint">
+            <span>🖱️ <strong>드래그:</strong> 지도 이동 &nbsp;|&nbsp; 🔍 <strong>마우스 휠/핀치:</strong> 확대·축소 &nbsp;|&nbsp; 🏢 <strong>마커 클릭:</strong> 등기부 열람</span>
+          </div>
 
-          <!-- Dynamic Building Pins Rendered Here -->
-          <div id="mapPinsLayer" class="map-pins-layer"></div>
+          <div class="city-map-viewport" id="cityMapViewport">
+            <!-- Panned & Zoomed World Layer -->
+            <div class="map-world" id="mapWorld">
+              <!-- SVG Island Graphic -->
+              <svg class="island-svg" viewBox="0 0 1600 1100" preserveAspectRatio="none">
+                <defs>
+                  <radialGradient id="oceanGrad" cx="50%" cy="50%" r="65%">
+                    <stop offset="0%" stop-color="#0a1a33" />
+                    <stop offset="60%" stop-color="#061022" />
+                    <stop offset="100%" stop-color="#040914" />
+                  </radialGradient>
+                  <radialGradient id="islandTerrain" cx="48%" cy="46%" r="55%">
+                    <stop offset="0%" stop-color="#142c3e" />
+                    <stop offset="55%" stop-color="#0f2233" />
+                    <stop offset="100%" stop-color="#091724" />
+                  </radialGradient>
+                  <linearGradient id="centralRiverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#0284c7" />
+                    <stop offset="50%" stop-color="#0369a1" />
+                    <stop offset="100%" stop-color="#075985" />
+                  </linearGradient>
+                  <filter id="glowReef" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="8" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                  </filter>
+                </defs>
+
+                <!-- Ocean Base -->
+                <rect width="1600" height="1100" fill="url(#oceanGrad)" />
+
+                <!-- Bathymetry Depth Contours (Ocean Rings) -->
+                <path d="M 120,130 C 400,30 1200,30 1480,110 C 1600,260 1590,820 1480,980 C 1200,1070 400,1070 120,980 C 10,820 10,260 120,130 Z" fill="none" stroke="rgba(14, 165, 233, 0.06)" stroke-width="60" />
+                <path d="M 180,160 C 450,70 1150,70 1420,150 C 1530,280 1520,780 1420,920 C 1150,1010 450,1010 180,920 C 70,780 70,280 180,160 Z" fill="none" stroke="rgba(14, 165, 233, 0.1)" stroke-width="40" />
+
+                <!-- Outer Shallow Reef & Turquoise Lagoon Shelf -->
+                <path d="M 230,160 C 380,70 620,50 800,50 C 980,50 1210,80 1370,130 C 1480,170 1550,240 1530,370 C 1510,490 1430,540 1350,590 C 1290,630 1260,710 1310,850 C 1340,940 1260,1000 1110,1020 C 960,1040 800,1050 680,1040 C 510,1030 370,1000 270,950 C 180,900 130,810 150,710 C 170,610 120,550 100,450 C 80,340 130,220 230,160 Z" fill="rgba(34, 211, 238, 0.16)" stroke="rgba(56, 189, 248, 0.45)" stroke-width="8" filter="url(#glowReef)" />
+
+                <!-- Golden Sand Beaches (Island Perimeter) -->
+                <path d="M 240,170 C 385,85 620,65 800,65 C 980,65 1205,95 1360,145 C 1465,185 1535,250 1515,370 C 1495,485 1415,535 1335,585 C 1275,625 1245,705 1295,845 C 1325,930 1245,990 1100,1010 C 955,1030 800,1040 680,1030 C 515,1020 375,990 280,940 C 195,895 145,805 165,705 C 185,610 135,550 115,455 C 95,350 145,230 240,170 Z" fill="#b08968" stroke="#d4a373" stroke-width="14" stroke-linejoin="round" />
+
+                <!-- Main Island Landmass -->
+                <path d="M 245,178 C 390,95 620,78 800,78 C 980,78 1200,105 1350,155 C 1450,192 1518,255 1500,368 C 1480,480 1405,528 1325,578 C 1265,618 1238,698 1285,835 C 1312,918 1235,978 1090,998 C 950,1018 800,1028 680,1018 C 520,1008 385,978 290,930 C 210,885 160,800 180,700 C 198,610 150,550 130,460 C 112,360 155,242 245,178 Z" fill="url(#islandTerrain)" stroke="#233a52" stroke-width="4" stroke-linejoin="round" />
+
+                <!-- Topographic District Zones on Land -->
+                <!-- 1. Central Capitol Plateau (North) -->
+                <path d="M 400,140 C 600,100 1000,100 1200,160 C 1220,290 1110,350 800,350 C 510,350 380,270 400,140 Z" fill="rgba(245, 158, 11, 0.07)" stroke="rgba(251, 191, 36, 0.22)" stroke-width="2" stroke-dasharray="10,6" />
+                
+                <!-- 2. Nexus Financial Peninsula (East) -->
+                <path d="M 1060,170 C 1220,170 1460,250 1460,370 C 1460,480 1340,540 1140,520 C 1040,510 1010,300 1060,170 Z" fill="rgba(59, 130, 246, 0.08)" stroke="rgba(96, 165, 250, 0.25)" stroke-width="2" stroke-dasharray="10,6" />
+
+                <!-- 3. Pulse Media Valley (West Coast) -->
+                <path d="M 160,240 C 320,200 480,240 460,480 C 440,600 280,640 180,580 C 140,510 130,320 160,240 Z" fill="rgba(168, 85, 247, 0.08)" stroke="rgba(192, 132, 252, 0.25)" stroke-width="2" stroke-dasharray="10,6" />
+
+                <!-- 4. Pigsty Grand Plaza Central Hub -->
+                <ellipse cx="800" cy="640" rx="330" ry="170" fill="rgba(16, 185, 129, 0.07)" stroke="rgba(52, 211, 153, 0.22)" stroke-width="2" stroke-dasharray="10,6" />
+
+                <!-- 5. Underground Restricted Zone (South/Rocky) -->
+                <path d="M 230,710 C 360,690 500,730 520,860 C 530,950 380,980 270,920 C 200,860 170,790 230,710 Z" fill="rgba(244, 63, 94, 0.09)" stroke="rgba(251, 113, 133, 0.25)" stroke-width="2" stroke-dasharray="10,6" />
+
+                <!-- Emerald Lake (Central District) -->
+                <ellipse cx="710" cy="335" rx="90" ry="52" fill="#0284c7" stroke="#38bdf8" stroke-width="3" />
+                <path d="M 660,335 Q 710,320 760,335" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2" />
+
+                <!-- Grand Central River (Flows from Emerald Lake to South Harbor) -->
+                <path d="M 710,375 C 690,445 725,510 755,570 C 795,640 815,720 795,820 C 775,910 745,970 725,1030" fill="none" stroke="url(#centralRiverGrad)" stroke-width="38" stroke-linecap="round" />
+                <path d="M 710,375 C 690,445 725,510 755,570 C 795,640 815,720 795,820 C 775,910 745,970 725,1030" fill="none" stroke="#38bdf8" stroke-width="4" stroke-dasharray="14,10" opacity="0.6" />
+
+                <!-- West Media River Inlet -->
+                <path d="M 120,490 Q 280,475 430,430" fill="none" stroke="#0284c7" stroke-width="20" stroke-linecap="round" />
+
+                <!-- Island Ring Expressway (Golden Highway) -->
+                <path d="M 380,240 C 600,180 1000,180 1330,270 C 1410,320 1410,430 1315,520 C 1215,610 1220,750 1175,860 C 1115,950 900,980 740,970 C 550,960 345,925 265,835 C 205,765 205,635 225,495 C 245,355 285,265 380,240 Z" fill="none" stroke="rgba(245, 158, 11, 0.4)" stroke-width="7" stroke-linecap="round" />
+                <path d="M 380,240 C 600,180 1000,180 1330,270 C 1410,320 1410,430 1315,520 C 1215,610 1220,750 1175,860 C 1115,950 900,980 740,970 C 550,960 345,925 265,835 C 205,765 205,635 225,495 C 245,355 285,265 380,240 Z" fill="none" stroke="#fcd34d" stroke-width="1.5" stroke-dasharray="10,8" opacity="0.8" />
+
+                <!-- Cross-Island Boulevards -->
+                <path d="M 225,495 C 470,505 790,555 1315,520" fill="none" stroke="rgba(148, 163, 184, 0.25)" stroke-width="4" />
+                <path d="M 800,140 L 800,970" fill="none" stroke="rgba(148, 163, 184, 0.22)" stroke-width="4" />
+                <circle cx="800" cy="640" r="130" fill="none" stroke="rgba(16, 185, 129, 0.3)" stroke-width="3" stroke-dasharray="8,6" />
+
+                <!-- Grand Bridges Across River -->
+                <rect x="732" y="495" width="36" height="14" rx="3" fill="#e2e8f0" stroke="#1e293b" stroke-width="2" />
+                <rect x="780" y="655" width="36" height="14" rx="3" fill="#e2e8f0" stroke="#1e293b" stroke-width="2" />
+                <rect x="778" y="825" width="38" height="14" rx="3" fill="#e2e8f0" stroke="#1e293b" stroke-width="2" />
+
+                <!-- Harbor Docks & Pier Jetties -->
+                <rect x="705" y="1000" width="12" height="50" rx="3" fill="#64748b" />
+                <rect x="740" y="1010" width="12" height="45" rx="3" fill="#64748b" />
+                <rect x="1265" y="830" width="45" height="12" rx="3" fill="#64748b" />
+              </svg>
+
+              <!-- District Watermark Labels in World -->
+              <div class="zone-label zone-central">제1구 · 중앙 행정·의사당구<br><span>CENTRAL CAPITOL DISTRICT</span></div>
+              <div class="zone-label zone-finance">제2구 · 넥서스 금융·비즈니스구<br><span>NEXUS FINANCIAL DISTRICT</span></div>
+              <div class="zone-label zone-media">제3구 · 펄스 미디어·창작밸리<br><span>PULSE MEDIA VALLEY</span></div>
+              <div class="zone-label zone-plaza">제4구 · 피그스티 광장·번화가<br><span>PIGSTY GRAND PLAZA</span></div>
+              <div class="zone-label zone-underground">제5구 · 언더그라운드·제한구역<br><span>UNDERGROUND RESTRICTED ZONE</span></div>
+
+              <!-- Public Landmarks Layer -->
+              <div id="mapLandmarksLayer" class="map-landmarks-layer"></div>
+
+              <!-- Dynamic Building Pins Rendered Here -->
+              <div id="mapPinsLayer" class="map-pins-layer"></div>
+            </div>
+          </div>
         </div>
         <p class="map-hint">💡 지도 위의 건물 마커를 클릭하면 우측 등기소 창구에서 상세 정보 열람, 건물 매입(분양/매수), 공동명의 등기, 건물 간판 변경을 할 수 있습니다.</p>
       </div>
@@ -117,6 +213,7 @@
             <button type="button" class="btn small active" id="filterAllLotBtn">전체 건물</button>
             <button type="button" class="btn small" id="filterSaleLotBtn">🟢 분양/매물만</button>
             <button type="button" class="btn small" id="filterMineLotBtn">👑 내 건물만</button>
+            <button type="button" class="btn small" id="filterLandmarksBtn">🏛️ 공공 랜드마크</button>
           </div>
         </div>
         <div id="buildingLedgerList" class="ledger-list"></div>
@@ -269,6 +366,6 @@
     </div>
   </div>
 
-  <script type="module" src="/app.js?v=1"></script>
+  <script type="module" src="/app.js?v=2"></script>
 </body>
 </html>
