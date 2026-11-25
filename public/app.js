@@ -13,8 +13,8 @@ let cfg = {
 const PUBLIC_LANDMARKS = [
   {
     id: 'landmark-agora',
-    name: '아텔리에 최고인민회의 의사당',
-    enName: 'ATELIER SUPREME ASSEMBLY (AGORA)',
+    name: '아텔리에 국회의사당 (AGORA)',
+    enName: 'ATELIER NATIONAL ASSEMBLY (AGORA)',
     district: 'central',
     districtKo: '중앙 행정·의사당구',
     icon: '🏛️',
@@ -22,7 +22,7 @@ const PUBLIC_LANDMARKS = [
     mapY: 13,
     badge: '국가 최고 입법기관',
     address: '아텔리에 제1특별시 중앙구 의사당대로 1',
-    desc: '아텔리에 제1특별시의 모든 헌법 제정과 정책 법안 표결이 이루어지는 최고 의회 전당.',
+    desc: '아텔리에 제1특별시의 모든 법안 발의와 민주적 정책 표결이 이루어지는 입법부 의회 전당.',
     siteUrl: 'https://assembly-lovat.vercel.app',
   },
   {
