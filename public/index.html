@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CADASTRE — ATELIER J 도시 지적도 · 부동산 등기 거래소</title>
+  <link rel="stylesheet" href="/style.css?v=1" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="crest">🗺️</span>
+        <div>
+          <h1>CADASTRE</h1>
+          <span class="sub">ATELIER J 도시 지적도 · 부동산 등기 및 랜드마크 매매 거래소</span>
+        </div>
+      </div>
+
+      <div class="district-pills" id="districtFilterBar">
+        <button type="button" class="d-pill active" data-district="all">전체 도시 (ALL)</button>
+        <button type="button" class="d-pill" data-district="central">🏛️ 제1구 중앙·의사당</button>
+        <button type="button" class="d-pill" data-district="finance">🏦 제2구 넥서스 금융가</button>
+        <button type="button" class="d-pill" data-district="media">🎙️ 제3구 미디어밸리</button>
+        <button type="button" class="d-pill" data-district="plaza">🐷 제4구 피그스티 광장</button>
+        <button type="button" class="d-pill" data-district="underground">🕶️ 제5구 지하특구</button>
+      </div>
+
+      <div class="topbar-actions">
+        <a href="https://citizen-pass-beryl.vercel.app" target="_blank" rel="noopener" class="btn ghost">🪪 주민센터(민증)</a>
+        <a href="https://assembly-lovat.vercel.app" target="_blank" rel="noopener" class="btn ghost">🏛️ AGORA 의회</a>
+        <button type="button" id="openAdminBuildBtn" class="btn gold" hidden>🏗️ 신축 건물 허가</button>
+        <button type="button" id="oneidBtn" class="btn gold">ONEID 로그인</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- TOP STATS BAR -->
+    <section class="stats-bar">
+      <div class="stat-chip">
+        <span class="s-label">등록 필지 · 건축물</span>
+        <strong id="statTotalBuildings">20동</strong>
+      </div>
+      <div class="stat-chip">
+        <span class="s-label">분양 · 매수 가능 매물</span>
+        <strong id="statForSale" style="color:#34d399;">0동</strong>
+      </div>
+      <div class="stat-chip">
+        <span class="s-label">민간 등기 완료 건물</span>
+        <strong id="statOwned" style="color:#fcd34d;">0동</strong>
+      </div>
+      <div class="stat-chip">
+        <span class="s-label">내 보유 부동산</span>
+        <strong id="statMyBuildings" style="color:#60a5fa;">0동</strong>
+      </div>
+    </section>
+
+    <!-- MAIN MAP + BUILDING INSPECTOR GRID -->
+    <section class="map-workspace">
+      <!-- LEFT: INTERACTIVE CITY CADASTRE MAP -->
+      <div class="card map-stage-card">
+        <div class="map-stage-head">
+          <div>
+            <span class="eyebrow">ATELIER METROPOLITAN CADASTRAL MAP</span>
+            <h2>🗺️ 아텔리에 제1특별시 실시간 지적도 · 건물 현황판</h2>
+          </div>
+          <div class="map-legend">
+            <span class="leg-item"><i class="dot sale"></i> 분양/매물</span>
+            <span class="leg-item"><i class="dot owned"></i> 사유지(등기됨)</span>
+            <span class="leg-item"><i class="dot mine"></i> 내 소유 건물</span>
+          </div>
+        </div>
+
+        <div class="city-map-viewport" id="cityMapViewport">
+          <!-- District Background Zones & Roads -->
+          <svg class="city-roads-svg" viewBox="0 0 1000 700" preserveAspectRatio="none">
+            <!-- River running through the city -->
+            <path d="M 0,430 Q 260,390 510,455 T 1000,420" fill="none" stroke="rgba(14, 165, 233, 0.22)" stroke-width="44" />
+            <path d="M 0,430 Q 260,390 510,455 T 1000,420" fill="none" stroke="rgba(56, 189, 248, 0.35)" stroke-width="2" stroke-dasharray="10,8" />
+            <!-- Major Highways & Grid Roads -->
+            <line x1="500" y1="0" x2="500" y2="700" stroke="rgba(148, 163, 184, 0.2)" stroke-width="10" />
+            <line x1="0" y1="250" x2="1000" y2="250" stroke="rgba(148, 163, 184, 0.2)" stroke-width="10" />
+            <line x1="280" y1="0" x2="280" y2="700" stroke="rgba(148, 163, 184, 0.14)" stroke-width="5" />
+            <line x1="700" y1="0" x2="700" y2="700" stroke="rgba(148, 163, 184, 0.14)" stroke-width="5" />
+            <circle cx="500" cy="250" r="115" fill="none" stroke="rgba(251, 191, 36, 0.22)" stroke-width="4" stroke-dasharray="6,6" />
+          </svg>
+
+          <!-- District Watermark Labels -->
+          <div class="zone-label zone-central">제1구 · 중앙 행정·의사당구<br><span>CENTRAL CAPITOL DISTRICT</span></div>
+          <div class="zone-label zone-finance">제2구 · 넥서스 금융·비즈니스구<br><span>NEXUS FINANCIAL DISTRICT</span></div>
+          <div class="zone-label zone-media">제3구 · 펄스 미디어·창작밸리<br><span>PULSE MEDIA VALLEY</span></div>
+          <div class="zone-label zone-plaza">제4구 · 피그스티 광장·번화가<br><span>PIGSTY GRAND PLAZA</span></div>
+          <div class="zone-label zone-underground">제5구 · 언더그라운드·제한구역<br><span>UNDERGROUND RESTRICTED ZONE</span></div>
+
+          <!-- Dynamic Building Pins Rendered Here -->
+          <div id="mapPinsLayer" class="map-pins-layer"></div>
+        </div>
+        <p class="map-hint">💡 지도 위의 건물 마커를 클릭하면 우측 등기소 창구에서 상세 정보 열람, 건물 매입(분양/매수), 공동명의 등기, 건물 간판 변경을 할 수 있습니다.</p>
+      </div>
+
+      <!-- RIGHT: SELECTED BUILDING INSPECTOR & DEED PANEL -->
+      <aside class="card inspector-card" id="inspectorPanel">
+        <!-- Rendered by app.js -->
+      </aside>
+    </section>
+
+    <!-- ALL BUILDINGS DIRECTORY & RECENT TRADES -->
+    <section class="bottom-grid">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow">CADASTRAL LEDGER &amp; LISTINGS</span>
+            <h2>🏢 전체 필지 · 건축물 등기 대장 (<span id="buildingListCount">0</span>동)</h2>
+          </div>
+          <div class="sale-filter">
+            <button type="button" class="btn small active" id="filterAllLotBtn">전체 건물</button>
+            <button type="button" class="btn small" id="filterSaleLotBtn">🟢 분양/매물만</button>
+            <button type="button" class="btn small" id="filterMineLotBtn">👑 내 건물만</button>
+          </div>
+        </div>
+        <div id="buildingLedgerList" class="ledger-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow">REAL-TIME TRANSACTION LOG</span>
+            <h2>📜 최근 부동산 소유권 이전 · 등기 실거래 내역</h2>
+          </div>
+        </div>
+        <div id="tradeHistoryList" class="trade-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- BUY / REGISTER BUILDING MODAL -->
+  <div id="buyModal" class="modal-backdrop" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="buyModalTitle">🏛️ 부동산 소유권 이전 등기 신청</h3>
+        <button type="button" id="closeBuyModalBtn" class="icon-close">×</button>
+      </div>
+      <form id="buyForm" class="modal-form">
+        <input type="hidden" id="buyBuildingId" />
+        <div class="deed-preview-mini" id="buyBuildingSummary"></div>
+
+        <label>
+          <span>공동명의 등기자 (선택 · 커플/배우자 또는 동업자 닉네임)</span>
+          <input id="buyCoOwnerInput" type="text" maxlength="24" placeholder="단독명의일 경우 비워두세요" />
+        </label>
+
+        <label>
+          <span>건물 외벽 커스텀 간판 · 슬로건 (최대 60자)</span>
+          <input id="buySignboardInput" type="text" maxlength="60" placeholder="지도와 건물 정보에 표시될 건물주 간판 문구" required />
+        </label>
+
+        <label class="checkbox-row">
+          <input id="buySetDomicileCheck" type="checkbox" checked />
+          <span>🪪 <strong>통합 주민센터(CITIZEN PASS) 내 주민등록증의 공식 주소지</strong>를 이 건물로 즉시 변경</span>
+        </label>
+
+        <button type="submit" class="btn gold full">✍️ 소유권 이전 등기 완료 및 등기권리증 발급</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- OWNER MANAGE BUILDING MODAL -->
+  <div id="manageModal" class="modal-backdrop" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>🔑 건물주 관리 · 간판 변경 · 매물 내놓기</h3>
+        <button type="button" id="closeManageModalBtn" class="icon-close">×</button>
+      </div>
+      <form id="manageForm" class="modal-form">
+        <input type="hidden" id="manageBuildingId" />
+        <label>
+          <span>건물 외벽 간판 · 소개 문구</span>
+          <input id="manageSignboardInput" type="text" maxlength="60" required />
+        </label>
+        <label>
+          <span>공동명의자 (배우자/커플/파트너 닉네임)</span>
+          <input id="manageCoOwnerInput" type="text" maxlength="24" placeholder="단독명의일 경우 비워두세요" />
+        </label>
+        <label>
+          <span>희망 매도가 / 공시지가 (원)</span>
+          <input id="managePriceInput" type="number" min="1000000" step="1000000" required />
+        </label>
+        <label class="checkbox-row">
+          <input id="manageForSaleCheck" type="checkbox" />
+          <span>🟢 이 건물을 부동산 시장에 <strong>매수 가능 매물</strong>로 내놓기</span>
+        </label>
+        <label class="checkbox-row">
+          <input id="manageSetDomicileCheck" type="checkbox" />
+          <span>🪪 <strong>통합 주민센터(CITIZEN PASS) 내 주민등록증 주소지</strong>를 이 건물로 설정</span>
+        </label>
+        <button type="submit" class="btn gold full">설정 저장 및 등기부 업데이트</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ADMIN NEW BUILDING CONSTRUCTION MODAL -->
+  <div id="adminBuildModal" class="modal-backdrop" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>🏗️ 국토교통부 직권 — 신규 건축물 준공 및 필지 등록</h3>
+        <button type="button" id="closeAdminBuildModalBtn" class="icon-close">×</button>
+      </div>
+      <form id="adminBuildForm" class="modal-form">
+        <div class="form-row-2">
+          <label>
+            <span>관할 행정구역</span>
+            <select id="adminDistrictSelect">
+              <option value="central">제1구 · 중앙 행정·의사당구</option>
+              <option value="finance">제2구 · 넥서스 금융·비즈니스구</option>
+              <option value="media">제3구 · 펄스 미디어·창작밸리</option>
+              <option value="plaza">제4구 · 피그스티 광장·번화가</option>
+              <option value="underground">제5구 · 언더그라운드·제한구역</option>
+            </select>
+          </label>
+          <label>
+            <span>건물 아이콘</span>
+            <select id="adminIconSelect">
+              <option value="🏢">🏢 오피스 빌딩</option>
+              <option value="🏰">🏰 펜트하우스/성채</option>
+              <option value="🏙️">🏙️ 마천루 타워</option>
+              <option value="🏡">🏡 단독 타운하우스</option>
+              <option value="🛍️">🛍️ 백화점/상가</option>
+              <option value="🏨">🏨 호텔/리조트</option>
+              <option value="⚖️">⚖️ 법원/관공서</option>
+              <option value="🕶️">🕶️ 지하 아지트</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span>건축물 명칭</span>
+          <input id="adminNameInput" type="text" maxlength="40" placeholder="예: 아텔리에 시그니엘 타워" required />
+        </label>
+        <label>
+          <span>상세 도로명 주소</span>
+          <input id="adminAddressInput" type="text" maxlength="80" placeholder="예: 아텔리에 제1특별시 중앙구 올림픽로 300" required />
+        </label>
+        <div class="form-row-2">
+          <label>
+            <span>지도 가로 좌표 X (10~90%)</span>
+            <input id="adminMapXInput" type="number" min="10" max="90" value="55" required />
+          </label>
+          <label>
+            <span>지도 세로 좌표 Y (10~90%)</span>
+            <input id="adminMapYInput" type="number" min="10" max="90" value="40" required />
+          </label>
+        </div>
+        <div class="form-row-2">
+          <label>
+            <span>층수 (층)</span>
+            <input id="adminFloorsInput" type="number" min="1" max="200" value="35" required />
+          </label>
+          <label>
+            <span>초기 분양가 (원)</span>
+            <input id="adminPriceInput" type="number" min="1000000" step="10000000" value="300000000" required />
+          </label>
+        </div>
+        <label>
+          <span>건물 설명</span>
+          <input id="adminDescInput" type="text" maxlength="160" placeholder="건물 특징 및 입지 소개" required />
+        </label>
+        <button type="submit" class="btn gold full">신규 건물 준공 및 지도에 즉시 배치</button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js?v=1"></script>
+</body>
+</html>

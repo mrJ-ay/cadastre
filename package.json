@@ -1,0 +1,15 @@
+{
+  "name": "cadastre",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CADASTRE — 아텔리에 시티 지적도 · 부동산 등기 및 건물 매매 거래소",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.13.1"
+  }
+}
