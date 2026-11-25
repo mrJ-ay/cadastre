@@ -158,6 +158,22 @@ const buyForm = document.getElementById('buyForm');
 const buyBankSettlementBox = document.getElementById('buyBankSettlementBox');
 const buySubmitBtn = document.getElementById('buySubmitBtn');
 
+const sellModal = document.getElementById('sellModal');
+const closeSellModalBtn = document.getElementById('closeSellModalBtn');
+const sellForm = document.getElementById('sellForm');
+const sellBuildingId = document.getElementById('sellBuildingId');
+const sellPriceInput = document.getElementById('sellPriceInput');
+const sellSignboardInput = document.getElementById('sellSignboardInput');
+const sellBuildingSummary = document.getElementById('sellBuildingSummary');
+const sellSubmitBtn = document.getElementById('sellSubmitBtn');
+
+const sellbackModal = document.getElementById('sellbackModal');
+const closeSellbackModalBtn = document.getElementById('closeSellbackModalBtn');
+const sellbackBuildingId = document.getElementById('sellbackBuildingId');
+const sellbackBuildingSummary = document.getElementById('sellbackBuildingSummary');
+const sellbackSettlementBox = document.getElementById('sellbackSettlementBox');
+const sellbackConfirmBtn = document.getElementById('sellbackConfirmBtn');
+
 const manageModal = document.getElementById('manageModal');
 const closeManageModalBtn = document.getElementById('closeManageModalBtn');
 const manageForm = document.getElementById('manageForm');
@@ -829,7 +845,25 @@ function renderInspector(b) {
       }
       ${
         mine
-          ? `<button type="button" class="btn emerald full" id="inspectorManageBtn">🔑 건물주 관리 (간판 변경 · 매물 등록 · 민증 주소지 반영)</button>`
+          ? `
+            <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:12.5px;font-weight:800;color:#60a5fa;">👑 내 소유 부동산 관리</span>
+                <span class="badge ${b.forSale ? 'sale' : 'owned'}">${b.forSale ? '🟢 시장 매물 등록 중' : '🔒 비공개 사유지'}</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                ${
+                  b.forSale
+                    ? `<button type="button" class="btn small danger" id="inspectorCancelSaleBtn">🛑 매물 등록 취소</button>`
+                    : `<button type="button" class="btn small gold" id="inspectorOpenSellBtn">🏷️ 시장 매도 등록</button>`
+                }
+                <button type="button" class="btn small danger" id="inspectorOpenSellbackBtn">🏛️ 국가 즉시 매각</button>
+              </div>
+              <button type="button" class="btn emerald full" id="inspectorManageBtn" style="padding:8px 12px;font-size:12.5px;">
+                🔑 간판 · 공동명의 · 민증 주소 설정
+              </button>
+            </div>
+          `
           : ''
       }
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -850,6 +884,18 @@ function renderInspector(b) {
 
   document.getElementById('inspectorLoginBtn')?.addEventListener('click', () => startOneIdLogin());
   document.getElementById('inspectorBuyBtn')?.addEventListener('click', () => openBuyModal(b));
+  document.getElementById('inspectorOpenSellBtn')?.addEventListener('click', () => openSellModal(b));
+  document.getElementById('inspectorCancelSaleBtn')?.addEventListener('click', async () => {
+    if (!confirm(`[${b.name}] 건물의 시장 매물 등록을 취소하고 비공개 사유지로 전환하시겠습니까?`)) return;
+    try {
+      await api(`/api/buildings/${b.id}/market-sale`, { method: 'POST', body: { forSale: false } });
+      await loadOverview(b.id);
+      alert('🔒 시장 매물 등록이 취소되었습니다. 이제 비공개 사유지로 안전하게 보관됩니다.');
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  document.getElementById('inspectorOpenSellbackBtn')?.addEventListener('click', () => openSellbackModal(b));
   document.getElementById('inspectorManageBtn')?.addEventListener('click', () => openManageModal(b));
   document.getElementById('inspectorDownloadDeedBtn')?.addEventListener('click', () => exportDeedPng(b));
   document.getElementById('inspectorNationalizeBtn')?.addEventListener('click', async () => {
@@ -970,6 +1016,69 @@ function openManageModal(b) {
   document.getElementById('manageForSaleCheck').checked = Boolean(b.forSale);
   document.getElementById('manageSetDomicileCheck').checked = false;
   manageModal.hidden = false;
+}
+
+function openSellModal(b) {
+  if (!stateData.me) return startOneIdLogin();
+  sellBuildingId.value = b.id;
+  sellBuildingSummary.innerHTML = `
+    <div><strong>${escapeHtml(b.icon)} ${escapeHtml(b.name)}</strong> (${escapeHtml(b.lotNo)})</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:2px;">소재지: ${escapeHtml(b.address)}</div>
+    <div style="font-size:13px;color:#fcd34d;margin-top:4px;font-weight:800;">현재 공시지가: ${formatWon(b.price)}</div>
+  `;
+  sellPriceInput.value = b.price;
+  sellSignboardInput.value = b.signboard || '';
+  sellModal.hidden = false;
+}
+
+function openSellbackModal(b) {
+  if (!stateData.me) return startOneIdLogin();
+  sellbackBuildingId.value = b.id;
+  sellbackBuildingSummary.innerHTML = `
+    <div><strong>${escapeHtml(b.icon)} ${escapeHtml(b.name)}</strong> (${escapeHtml(b.lotNo)})</div>
+    <div style="font-size:12px;color:#94a3b8;margin-top:2px;">소재지: ${escapeHtml(b.address)}</div>
+  `;
+
+  const price = Number(b.price);
+  const refund = Math.floor(price * 0.9);
+  const tax = price - refund;
+  const acct = stateData.me?.bank?.accountNo || '777-01-XXXXXX';
+  const curBal = Number(stateData.me?.bank?.balance ?? 0);
+  const afterBal = curBal + refund;
+
+  sellbackSettlementBox.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-weight:800;color:#34d399;">🏛️ 국토교통부 국가 환매 정산서</span>
+      <span style="font-size:11px;color:#94a3b8;">입금계좌: ${acct}</span>
+    </div>
+    <table class="settlement-table">
+      <tbody>
+        <tr>
+          <td style="color:#94a3b8;">건축물 기준 평가액</td>
+          <td style="color:#f1f5f9;">${formatWon(price)}</td>
+        </tr>
+        <tr>
+          <td style="color:#94a3b8;">국가 양도소득세 및 수수료 (10%)</td>
+          <td style="color:#ef4444;">- ${formatWon(tax)}</td>
+        </tr>
+        <tr><td colspan="2" class="settlement-divider"></td></tr>
+        <tr>
+          <td style="color:#6ee7b7;font-weight:700;">원뱅크 통장 즉시 입금액 (환매율 90%)</td>
+          <td style="color:#34d399;font-size:15px;font-weight:900;">+ ${formatWon(refund)}</td>
+        </tr>
+        <tr>
+          <td style="color:#94a3b8;font-size:11.5px;">입금 후 예상 통장 잔고</td>
+          <td style="color:#fcd34d;font-size:12.5px;">${formatWon(afterBal)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="settlement-alert ok">
+      💡 <strong>즉시 현금화:</strong> 매각 승인 즉시 국토교통부 환매 기금에서 귀하의 원뱅크 통장으로 대금이 실시간 입금됩니다.
+    </div>
+  `;
+
+  sellbackConfirmBtn.textContent = `💰 ${formatWon(refund)} 수령하고 국가에 즉시 매각`;
+  sellbackModal.hidden = false;
 }
 
 function exportDeedPng(b) {
@@ -1263,9 +1372,52 @@ oneidBtn?.addEventListener('click', () => {
 });
 
 closeBuyModalBtn?.addEventListener('click', () => { buyModal.hidden = true; });
+closeSellModalBtn?.addEventListener('click', () => { sellModal.hidden = true; });
+closeSellbackModalBtn?.addEventListener('click', () => { sellbackModal.hidden = true; });
 closeManageModalBtn?.addEventListener('click', () => { manageModal.hidden = true; });
 openAdminBuildBtn?.addEventListener('click', () => { adminBuildModal.hidden = false; });
 closeAdminBuildModalBtn?.addEventListener('click', () => { adminBuildModal.hidden = true; });
+
+sellForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = Number(sellBuildingId.value);
+  const price = Number(sellPriceInput.value);
+  const signboard = sellSignboardInput.value.trim();
+  try {
+    await api(`/api/buildings/${id}/market-sale`, {
+      method: 'POST',
+      body: { forSale: true, price, signboard },
+    });
+    sellModal.hidden = true;
+    await loadOverview(id);
+    alert(`🎉 [부동산 시장 매물 등록 완료]\n${formatWon(price)}에 매물로 등록되었습니다.\n다른 시민이 매수 시 매매 대금이 본인의 원뱅크 계좌로 즉시 100% 입금됩니다!`);
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+sellbackConfirmBtn?.addEventListener('click', async () => {
+  const id = Number(sellbackBuildingId.value);
+  try {
+    sellbackConfirmBtn.disabled = true;
+    const res = await api(`/api/buildings/${id}/sellback`, { method: 'POST' });
+    sellbackModal.hidden = true;
+    if (res.newBalance !== undefined && stateData.me?.bank) {
+      stateData.me.bank.balance = res.newBalance;
+    }
+    await loadOverview(id);
+    alert(
+      `🎉 [국가 즉시 환매 매각 완료]\n` +
+      `소유권이 국유지로 반환되었으며, 환매 대금이 귀하의 원뱅크 통장으로 즉시 입금되었습니다!\n\n` +
+      `• 수령 환매액: +${formatWon(res.refund || 0)}\n` +
+      `• 현재 원뱅크 잔고: ${formatWon(res.newBalance || 0)}`
+    );
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    sellbackConfirmBtn.disabled = false;
+  }
+});
 
 buyForm?.addEventListener('submit', async (e) => {
   e.preventDefault();

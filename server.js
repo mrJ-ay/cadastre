@@ -864,6 +864,158 @@ app.put('/api/buildings/:id/manage', async (req, res) => {
   }
 });
 
+// 국가 즉시 매각 (국유화 환매 현금화 -> 원뱅크 계좌 즉시 입금)
+app.post('/api/buildings/:id/sellback', async (req, res) => {
+  if (!pool) return res.status(500).json({ error: 'DATABASE_URL not configured' });
+  const user = await verifyOneIdUser(req);
+  if (!user) return res.status(401).json({ error: 'ONEID 로그인이 필요합니다.' });
+
+  const id = Number(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Lock building
+    const { rows: bRows } = await client.query(
+      'SELECT * FROM cadastre_buildings WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+    const b = bRows[0];
+    if (!b) throw new Error('건물을 찾을 수 없습니다.');
+
+    const isOwner =
+      user.isAdmin ||
+      b.owner_user_id === user.id ||
+      (b.co_owner_name && b.co_owner_name.toLowerCase() === user.nickname.toLowerCase());
+    if (!isOwner) {
+      throw new Error('해당 건물의 소유주(또는 공동명의자)만 매각할 수 있습니다.');
+    }
+
+    if (!b.owner_user_id) {
+      throw new Error('이미 국유지(미분양) 상태인 건물은 매각할 수 없습니다.');
+    }
+
+    const price = Number(b.price);
+    // 환매율: 90% (정부 세금/등기말소 수수료 10% 공제 후 90% 즉시 환급)
+    const refund = Math.floor(price * 0.9);
+
+    // 2. Lock player in ns_players and credit ONE-BANK balance
+    let pRes = await client.query('SELECT id, name, balance FROM ns_players WHERE id = $1 FOR UPDATE', [user.id]);
+    if (!pRes.rows.length) {
+      await client.query(
+        'INSERT INTO ns_players (id, name, balance) VALUES ($1, $2, 10000000) ON CONFLICT (id) DO NOTHING',
+        [user.id, user.nickname]
+      );
+      pRes = await client.query('SELECT id, name, balance FROM ns_players WHERE id = $1 FOR UPDATE', [user.id]);
+    }
+    const player = pRes.rows[0];
+    const newBal = Number(player.balance) + refund;
+
+    await client.query('UPDATE ns_players SET balance = $1 WHERE id = $2', [newBal, user.id]);
+
+    // 3. Record in ns_ledger
+    await client.query(
+      `INSERT INTO ns_ledger (player_id, delta, balance_after, reason, ref)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        user.id,
+        refund,
+        newBal,
+        'cadastre_sellback',
+        `[부동산 국가 환매] ${b.name} (${b.lot_no}) 국가 즉시 매각 대금 입금 (공시지가: ₩${price.toLocaleString()}, 환매액: ₩${refund.toLocaleString()})`
+      ]
+    );
+
+    // 4. Update building to public state
+    const { rows: updated } = await client.query(
+      `UPDATE cadastre_buildings
+       SET owner_user_id = NULL,
+           owner_name = '국유지 (미분양)',
+           co_owner_name = NULL,
+           for_sale = TRUE,
+           signboard = '',
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    // 5. Record trade history
+    await client.query(
+      `INSERT INTO cadastre_trades (lot_no, building_name, buyer_name, co_owner_name, seller_name, price)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [b.lot_no, b.name, '국토교통부 (국유화 환매)', null, user.nickname, refund]
+    );
+
+    // 6. If user's domicile was this building, clear domicile
+    try {
+      await client.query(
+        `UPDATE citizen_cards
+         SET domicile = '아텔리에 제1특별시 중앙구', updated_at = NOW()
+         WHERE user_id = $1 AND domicile LIKE $2`,
+        [user.id, `%${b.name}%`]
+      );
+    } catch {}
+
+    await client.query('COMMIT');
+
+    res.json({
+      ok: true,
+      refund,
+      newBalance: newBal,
+      building: serializeBuilding(updated[0]),
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 부동산 시장 매물 등록 및 출품/취소 (P2P 매도)
+app.post('/api/buildings/:id/market-sale', async (req, res) => {
+  if (!pool) return res.status(500).json({ error: 'DATABASE_URL not configured' });
+  const user = await verifyOneIdUser(req);
+  if (!user) return res.status(401).json({ error: 'ONEID 로그인이 필요합니다.' });
+
+  const id = Number(req.params.id);
+  const forSale = Boolean(req.body.forSale);
+  const rawPrice = Number(req.body.price);
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM cadastre_buildings WHERE id = $1', [id]);
+    const b = rows[0];
+    if (!b) return res.status(404).json({ error: '건물을 찾을 수 없습니다.' });
+
+    const isOwner =
+      user.isAdmin ||
+      b.owner_user_id === user.id ||
+      (b.co_owner_name && b.co_owner_name.toLowerCase() === user.nickname.toLowerCase());
+    if (!isOwner) {
+      return res.status(403).json({ error: '소유주만 매도 상태를 변경할 수 있습니다.' });
+    }
+
+    const price = Number.isFinite(rawPrice) && rawPrice >= 1000000 ? Math.floor(rawPrice) : Number(b.price);
+    const signboard = req.body.signboard !== undefined ? String(req.body.signboard).trim().slice(0, 60) : b.signboard;
+
+    const { rows: updated } = await pool.query(
+      `UPDATE cadastre_buildings
+       SET for_sale = $1,
+           price = $2,
+           signboard = $3,
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [forSale, price, signboard, id]
+    );
+
+    res.json({ ok: true, building: serializeBuilding(updated[0]) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // 총괄관리자(국토교통부장관) 전용: 신규 건물 건축 및 국유화
 app.post('/api/admin/buildings', async (req, res) => {
   const user = await verifyOneIdUser(req);

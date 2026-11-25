@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CADASTRE — ATELIER J 도시 지적도 · 부동산 등기 거래소</title>
-  <link rel="stylesheet" href="/style.css?v=4" />
+  <link rel="stylesheet" href="/style.css?v=5" />
 </head>
 <body>
   <header class="topbar">
@@ -270,6 +270,57 @@
     </div>
   </div>
 
+  <!-- P2P MARKET SELL MODAL -->
+  <div id="sellModal" class="modal-backdrop" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="sellModalTitle">🏷️ 부동산 시장 매도 등록 (P2P 매물 출품)</h3>
+        <button type="button" id="closeSellModalBtn" class="icon-close">×</button>
+      </div>
+      <form id="sellForm" class="modal-form">
+        <input type="hidden" id="sellBuildingId" />
+        <div class="deed-preview-mini" id="sellBuildingSummary"></div>
+
+        <label>
+          <span>희망 매도가 (판매가, 원)</span>
+          <input id="sellPriceInput" type="number" min="1000000" step="10000000" required />
+          <small style="color:#94a3b8;font-size:11.5px;">💡 타 시민이 매수 시, 매매 대금이 본인의 원뱅크 계좌로 즉시 100% 입금됩니다.</small>
+        </label>
+
+        <label>
+          <span>매물 홍보 간판 문구 (최대 60자)</span>
+          <input id="sellSignboardInput" type="text" maxlength="60" placeholder="예: 급매! 최고 전망 펜트하우스 (네고 가능)" />
+        </label>
+
+        <button type="submit" id="sellSubmitBtn" class="btn gold full">🏷️ 부동산 시장에 매물로 등록하기</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- STATE IMMEDIATE SELLBACK MODAL -->
+  <div id="sellbackModal" class="modal-backdrop" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>🏛️ 국가 즉시 매각 (아텔리에 국토부 환매 신청)</h3>
+        <button type="button" id="closeSellbackModalBtn" class="icon-close">×</button>
+      </div>
+      <div class="modal-form">
+        <input type="hidden" id="sellbackBuildingId" />
+        <div class="deed-preview-mini" id="sellbackBuildingSummary"></div>
+
+        <div id="sellbackSettlementBox" class="bank-settlement-box settlement-ok"></div>
+
+        <div class="settlement-alert warn" style="font-size:12px;">
+          ⚠️ <strong>환매 주의사항:</strong> 국가 매각 즉시 소유권이 국유지로 반환(등기 말소)되며, 환매 정산 대금이 원뱅크 통장으로 즉시 입금됩니다.
+        </div>
+
+        <button type="button" id="sellbackConfirmBtn" class="btn danger full" style="font-size:14px;padding:12px;">
+          💰 수령하고 국가에 즉시 매각하기
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- OWNER MANAGE BUILDING MODAL -->
   <div id="manageModal" class="modal-backdrop" hidden>
     <div class="modal-box">
@@ -374,6 +425,6 @@
     </div>
   </div>
 
-  <script type="module" src="/app.js?v=4"></script>
+  <script type="module" src="/app.js?v=5"></script>
 </body>
 </html>
