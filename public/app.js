@@ -290,6 +290,33 @@ function renderStats() {
 }
 
 // =========================================================
+// SELECTION HANDLERS (건물 및 랜드마크 선택 함수)
+// =========================================================
+function selectBuilding(b, focus = false) {
+  if (!b) return;
+  selectedBuilding = b;
+  selectedLandmark = null;
+  renderLandmarks();
+  renderMapPins();
+  renderInspector(b);
+  if (focus) {
+    focusMap(b.mapX, b.mapY, 1.55);
+  }
+}
+
+function selectLandmark(lm, focus = false) {
+  if (!lm) return;
+  selectedLandmark = lm;
+  selectedBuilding = null;
+  renderLandmarks();
+  renderMapPins();
+  renderInspectorLandmark(lm);
+  if (focus) {
+    focusMap(lm.mapX, lm.mapY, 1.55);
+  }
+}
+
+// =========================================================
 // ZOOM & PAN LOGIC (큰 섬 지도 확대 / 축소 / 이동)
 // =========================================================
 function clampPan() {
@@ -347,6 +374,11 @@ function focusMap(targetPercentX, targetPercentY, targetScale = 1.45) {
 function initMapInteractions() {
   if (!cityMapViewport) return;
 
+  let isPointerDown = false;
+  let dragThresholdPassed = false;
+  let downX = 0;
+  let downY = 0;
+
   // Mouse Wheel Zoom centered on cursor
   cityMapViewport.addEventListener(
     'wheel',
@@ -367,23 +399,24 @@ function initMapInteractions() {
     { passive: false }
   );
 
-  // Pointer Down (Mouse drag or touch drag)
+  // Pointer Down (Mouse drag or touch drag) - NO setPointerCapture so clicks work!
   cityMapViewport.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (e.target.closest('.map-controls')) return;
+
+    isPointerDown = true;
+    dragThresholdPassed = false;
+    hasDragged = false;
+    downX = e.clientX;
+    downY = e.clientY;
+    startPointerX = e.clientX;
+    startPointerY = e.clientY;
+    origPanX = mapPanX;
+    origPanY = mapPanY;
+
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    if (activePointers.size === 1) {
-      isPanning = true;
-      hasDragged = false;
-      startPointerX = e.clientX;
-      startPointerY = e.clientY;
-      origPanX = mapPanX;
-      origPanY = mapPanY;
-      cityMapViewport.style.cursor = 'grabbing';
-      try {
-        cityMapViewport.setPointerCapture(e.pointerId);
-      } catch (_) {}
-    } else if (activePointers.size === 2) {
+    if (activePointers.size === 2) {
       isPanning = false;
       const pts = Array.from(activePointers.values());
       initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
@@ -391,8 +424,8 @@ function initMapInteractions() {
     }
   });
 
-  cityMapViewport.addEventListener('pointermove', (e) => {
-    if (!activePointers.has(e.pointerId)) return;
+  window.addEventListener('pointermove', (e) => {
+    if (!isPointerDown) return;
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (activePointers.size === 2 && initialPinchDist) {
@@ -413,34 +446,63 @@ function initMapInteractions() {
       return;
     }
 
-    if (!isPanning) return;
-    const dx = e.clientX - startPointerX;
-    const dy = e.clientY - startPointerY;
-    if (Math.hypot(dx, dy) > 5) {
+    const dist = Math.hypot(e.clientX - downX, e.clientY - downY);
+    if (!dragThresholdPassed && dist > 6) {
+      dragThresholdPassed = true;
       hasDragged = true;
+      isPanning = true;
+      cityMapViewport.style.cursor = 'grabbing';
     }
-    mapPanX = origPanX + dx;
-    mapPanY = origPanY + dy;
-    clampPan();
-    applyMapTransform(false);
+
+    if (isPanning) {
+      const dx = e.clientX - startPointerX;
+      const dy = e.clientY - startPointerY;
+      mapPanX = origPanX + dx;
+      mapPanY = origPanY + dy;
+      clampPan();
+      applyMapTransform(false);
+    }
   });
 
   function pointerEnd(e) {
+    if (!isPointerDown) return;
     activePointers.delete(e.pointerId);
     if (activePointers.size === 0) {
+      isPointerDown = false;
       isPanning = false;
       cityMapViewport.style.cursor = 'grab';
     }
     if (activePointers.size < 2) {
       initialPinchDist = null;
     }
-    try {
-      cityMapViewport.releasePointerCapture(e.pointerId);
-    } catch (_) {}
+    if (hasDragged) {
+      setTimeout(() => {
+        hasDragged = false;
+      }, 100);
+    }
   }
 
-  cityMapViewport.addEventListener('pointerup', pointerEnd);
-  cityMapViewport.addEventListener('pointercancel', pointerEnd);
+  window.addEventListener('pointerup', pointerEnd);
+  window.addEventListener('pointercancel', pointerEnd);
+
+  // Delegated click handler on viewport - works 100% reliably regardless of inner targets
+  cityMapViewport.addEventListener('click', (e) => {
+    if (hasDragged) return;
+    const pin = e.target.closest('.map-pin');
+    if (pin) {
+      const id = Number(pin.dataset.pinId);
+      const found = (stateData.buildings || []).find((x) => x.id === id);
+      if (found) selectBuilding(found, false);
+      return;
+    }
+    const lm = e.target.closest('.landmark-pin');
+    if (lm) {
+      const id = lm.dataset.landmarkId;
+      const found = PUBLIC_LANDMARKS.find((x) => x.id === id);
+      if (found) selectLandmark(found, false);
+      return;
+    }
+  });
 
   window.addEventListener('resize', () => {
     clampPan();
@@ -512,12 +574,7 @@ function renderLandmarks() {
       e.stopPropagation();
       const id = el.dataset.landmarkId;
       const found = PUBLIC_LANDMARKS.find((x) => x.id === id);
-      if (!found) return;
-      selectedLandmark = found;
-      selectedBuilding = null;
-      renderLandmarks();
-      renderMapPins();
-      renderInspectorLandmark(found);
+      if (found) selectLandmark(found, false);
     });
   });
 }
@@ -558,12 +615,7 @@ function renderMapPins() {
       e.stopPropagation();
       const id = Number(pinEl.dataset.pinId);
       const found = (stateData.buildings || []).find((x) => x.id === id);
-      if (!found) return;
-      selectedBuilding = found;
-      selectedLandmark = null;
-      renderLandmarks();
-      renderMapPins();
-      renderInspector(found);
+      if (found) selectBuilding(found, false);
     });
   });
 }
@@ -877,14 +929,10 @@ function renderLedgerList() {
       row.addEventListener('click', () => {
         const id = row.dataset.ledgerLandmarkId;
         const found = PUBLIC_LANDMARKS.find((x) => x.id === id);
-        if (!found) return;
-        selectedLandmark = found;
-        selectedBuilding = null;
-        renderLandmarks();
-        renderMapPins();
-        renderInspectorLandmark(found);
-        focusMap(found.mapX, found.mapY, 1.6);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (found) {
+          selectLandmark(found, true);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
       });
     });
     return;
@@ -936,14 +984,10 @@ function renderLedgerList() {
     row.addEventListener('click', () => {
       const id = Number(row.dataset.ledgerId);
       const found = (stateData.buildings || []).find((x) => x.id === id);
-      if (!found) return;
-      selectedBuilding = found;
-      selectedLandmark = null;
-      renderLandmarks();
-      renderMapPins();
-      renderInspector(found);
-      focusMap(found.mapX, found.mapY, 1.6);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (found) {
+        selectBuilding(found, true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     });
   });
 }
@@ -1066,12 +1110,7 @@ oneidBtn?.addEventListener('click', () => {
     setLedgerFilter('mine');
     const myFirst = (stateData.buildings || []).find((b) => isMine(b));
     if (myFirst) {
-      selectedBuilding = myFirst;
-      selectedLandmark = null;
-      renderLandmarks();
-      renderMapPins();
-      renderInspector(myFirst);
-      focusMap(myFirst.mapX, myFirst.mapY, 1.6);
+      selectBuilding(myFirst, true);
     }
     return;
   }
@@ -1161,6 +1200,5 @@ adminBuildForm?.addEventListener('submit', async (e) => {
   } catch {}
   await handleOneIdCallback();
   await loadOverview();
-  // Initial fit of island
   setTimeout(() => fitIsland(false), 50);
 })();

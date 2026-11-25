@@ -434,13 +434,17 @@ body {
 .landmark-pin {
   position: absolute;
   transform: translate(-50%, -50%) scale(var(--scale-comp));
-  cursor: pointer;
+  cursor: pointer !important;
   display: flex;
   flex-direction: column;
   align-items: center;
   z-index: 12;
-  pointer-events: auto;
+  pointer-events: auto !important;
   transition: transform 0.16s ease, z-index 0.16s ease;
+}
+
+.landmark-pin * {
+  pointer-events: auto;
 }
 
 .landmark-pin:hover,
@@ -500,13 +504,17 @@ body {
 .map-pin {
   position: absolute;
   transform: translate(-50%, -50%) scale(var(--scale-comp));
-  cursor: pointer;
+  cursor: pointer !important;
   display: flex;
   flex-direction: column;
   align-items: center;
   z-index: 10;
-  pointer-events: auto;
+  pointer-events: auto !important;
   transition: transform 0.16s ease, z-index 0.16s ease;
+}
+
+.map-pin * {
+  pointer-events: auto;
 }
 
 .map-pin:hover,
