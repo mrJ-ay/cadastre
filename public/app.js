@@ -95,6 +95,20 @@ const PUBLIC_LANDMARKS = [
     desc: '24시간 응급의료 및 첨단 재생의학, 심리 치유 서비스를 제공하는 아텔리에 국립 종합병원.',
     siteUrl: 'https://revo-clinic.vercel.app',
   },
+  {
+    id: 'landmark-prison',
+    name: '아텔리에 중앙인민수감교화소 (ЦНИИ-1)',
+    enName: 'ЦЕНТРАЛЬНЫЙ НАРОДНЫЙ ИСПРАВИТЕЛЬНО-ТРУДОВОЙ ИЗОЛЯТОР',
+    district: 'underground',
+    districtKo: '언더그라운드·제한구역',
+    icon: '⛓️',
+    mapX: 35,
+    mapY: 89,
+    badge: '국가 특별 교정·수감기관',
+    address: '아텔리에 지하특구 해안암초로 1 (ЦНИИ-1)',
+    desc: '아텔리에 제1특별시의 질서를 어지럽힌 수형자들을 격리 수용하여 채석장 강제 노역과 반성문으로 사상을 교화하는 중앙인민수감교화소.',
+    siteUrl: 'https://prison-gold.vercel.app',
+  },
 ];
 
 let token = localStorage.getItem(TOKEN_KEY) || '';
